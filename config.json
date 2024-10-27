@@ -1,6 +1,6 @@
 {
-    "username":"66011374",
-    "ipAddress": "161.246.5.195",
+    "username":"",
+    "ipAddress": "",
     "acip": "10.252.13.10",
     "server_url": "https://portal.kmitl.ac.th:19008/portalauth/login",
     "server_url_heartbeat": "https://nani.csc.kmitl.ac.th/network-api/data/",
