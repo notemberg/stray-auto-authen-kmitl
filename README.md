@@ -46,7 +46,7 @@ stray_auto_authen.vbs
 ### Credit
 * **_assazzin & CSAG_** for original [Auto-authen-KMITL](https://github.com/assazzin/Auto-authen-KMITL) written in Perl language
 * **_Network Laboratory_** for original [Auto-authen-KMITL](https://gitlab.com/networklab-kmitl/auto-authen-kmitl) written in Python language Before CSC-KMITL Upgrade Authen Website
-* **_CE-HOUSE_** for original [Auto-Authen-KMITL] (https://github.com/CE-HOUSE/Auto-Authen-KMITL) written in Python language 
+* **_CE-HOUSE_** for original[Auto-Authen-KMITL] (https://github.com/CE-HOUSE/Auto-Authen-KMITL) written in Python language 
 * Core functions from these projects are used in this project under the MIT License. See the included license for more details.
 
 ### Project Attribution
