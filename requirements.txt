@@ -1,9 +1,8 @@
-certifi==2023.7.22
-chardet==5.2.0
-charset-normalizer==3.2.0
-idna==3.4
-requests==2.31.0
+certifi
+chardet
+charset-normalizer
+idna
+requests
 pystray
 Pillow
 cryptography
-msvcrt; platform_system=="Windows"
