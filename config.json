@@ -4,8 +4,7 @@
     "acip": "10.252.13.10",
     "server_url": "https://portal.kmitl.ac.th:19008/portalauth/login",
     "server_url_heartbeat": "https://nani.csc.kmitl.ac.th/network-api/data/",
-    "time_repeat": 120,
+    "time_repeat": 300,
     "max_login_attempt": 10,
-    "session_duration": 36000,
-    "os":"Windows 10 Home 64-bit"
+    "session_duration": 36000
 }

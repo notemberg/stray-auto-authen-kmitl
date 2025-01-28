@@ -12,65 +12,34 @@ import msvcrt  # For file locking (Windows)
 import pystray
 from pystray import MenuItem as item # Stray Icon
 from PIL import Image, ImageDraw
-from datetime import datetime
+from datetime import datetime, timedelta
 from cryptography.fernet import Fernet # Key Encryption
 
-# File Reading -----------------------------------------------------------------------------
+# Key Encryption -----------------------------------------------------------------------------
 # Read configuration from config.json
-def load_config(file_path):
-    try:
-        with open(file_path, 'r') as config_file:
-            return json.load(config_file)
-    except FileNotFoundError:
-        logging.error(f"Configuration file not found: {file_path}")
-        sys.exit(1)
-    except json.JSONDecodeError:
-        logging.error(f"Configuration file is not a valid JSON: {file_path}")
-        sys.exit(1)
+with open('config.json', 'r') as config_file:
+    config = json.load(config_file)
 
 # Read key encryption from encryption_key.key
-def load_encryption_key(file_path):
-    try:
-        with open(file_path, 'rb') as key_file:
-            return key_file.read()
-    except FileNotFoundError:
-        logging.error(f"Encryption key file not found: {file_path}")
-        sys.exit(1)
-    except Exception as e:
-        logging.error(f"Error loading encryption key: {e}")
-        sys.exit(1)
-
+with open('encryption_key.key', 'rb') as key_file:
+    key = key_file.read()
+# Create decoding key
+cipher = Fernet(key)
 
 # Read password from encrypted_password.txt
-def load_encrypted_password(file_path):
-    try:
-        with open(file_path, 'rb') as encrypted_file:
-            return encrypted_file.read()
-    except FileNotFoundError:
-        logging.error(f"Encrypted password file not found: {file_path}")
-        sys.exit(1)
-    except Exception as e:
-        logging.error(f"Error loading encrypted password: {e}")
-        sys.exit(1)
+with open('encrypted_password.txt', 'rb') as encrypted_file:
+    encrypted_password = encrypted_file.read()
 #----------------------------------------------------------------------------------------------
 
 
 # Load IP address and URLs from config.json ---------------------------------------------------
-config = load_config('config.json')
-key = load_encryption_key('encryption_key.key')
-encrypted_password = load_encrypted_password('encrypted_password.txt')
-# Create decoding key
-cipher = Fernet(key)
-
 userName = config['username']
 userPass = cipher.decrypt(encrypted_password).decode()
 ipAddress = config['ipAddress']
 server_url = config['server_url']
 acip = config['acip']
 server_url_heartbeat = config['server_url_heartbeat']
-operationsystem = config['os']
-connection_check_interval = config['time_repeat'] # Time interval between connection_check in seconds
-heartbeat_interval = config['heartbeat_interval'] # Time interval between heartbeats in seconds
+time_repeat = config['time_repeat']  # Time interval between heartbeats in seconds
 max_login_attempt = config['max_login_attempt']
 session_duration = config['session_duration']  # 8 hours = 28800 seconds
 umac = ''.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff) for ele in range(0, 8 * 6, 8)][::-1])
@@ -93,29 +62,12 @@ logging.basicConfig(
 #----------------------------------------------------------------------------------------------
 
 
-# Session tracking  ---------------------------------------------------------------------------
+# Session tracking variables ------------------------------------------------------------------
 login_time = None
 login_attempts = 0
-login_attempts_lock = threading.Lock()  # Lock for thread-safe access
-
 agent = requests.session()
 #----------------------------------------------------------------------------------------------
 
-# attempt  ---------------------------------------------------------------------------
-def increment_login_attempts():
-    global login_attempts
-    with login_attempts_lock:  # Protect this block
-        login_attempts += 1
-
-def reset_login_attempts():
-    global login_attempts
-    with login_attempts_lock:  # Protect this block
-        login_attempts = 0
-
-def get_login_attempts():
-    with login_attempts_lock:  # Protect read access
-        return login_attempts
-#----------------------------------------------------------------------------------------------
 
 # Function to monitor network connection ------------------------------------------------------
 def check_connection():
@@ -133,7 +85,7 @@ def check_connection():
 
 # Request to login ----------------------------------------------------------------------------
 def login():
-    global login_time
+    global login_time, login_attempts
     logging.info(f"Attempting login with username -> {userName}")
     try:
         url = server_url
@@ -154,34 +106,31 @@ def login():
 
         if content.status_code != 200:
             logging.warning('Error! Something went wrong (maybe wrong username and/or password?)...')
-            return False
 
     except requests.exceptions.RequestException:
         logging.warning(f'Connection lost... ')
-        return False
+        login_attempts += 1
+        return  # Exit the function early on connection failure
     
-    time.sleep(5)  
+    time.sleep(4)  
     connection, internet = check_connection()
     if connection and internet:
         logging.info(f"Login successful at {datetime.now()}: {data}")
         login_time = datetime.now()  # Record login time
-        reset_login_attempts()  # Reset login attempts
-        return True
+        login_attempts = 0  # Reset login attempts
     else:
         logging.warning(f"Login failed: {data}")
-        increment_login_attempts()
-        return False
+        login_attempts += 1
 #----------------------------------------------------------------------------------------------
 
 
 # Function to send a heartbeat request to keep the session alive ------------------------------
-stop_threads = threading.Event()
-
 def heartbeat():
+    global login_attempts
     try:
         content = agent.post(server_url_heartbeat, params={
             'username': userName,
-            'os': operationsystem,
+            'os': "Windows 10 Home 64-bit",
             'speed': 1.29,
             'newauth': 1
         })
@@ -194,41 +143,29 @@ def heartbeat():
     else:
         logging.warning('Heartbeat failed, checking if session expired...')
         return True, False
-#----------------------------------------------------------------------------------------------   
-
-
-#heartbeat_loop -------------------------------------------------------------------------------
-def heartbeat_loop(heartbeat_interval):
-    while not stop_threads.is_set():
-        heartbeat()
-        time.sleep(heartbeat_interval)
-#----------------------------------------------------------------------------------------------  
+#----------------------------------------------------------------------------------------------    
 
 
 # main authen loop ----------------------------------------------------------------------------
 def start_authentication():
-    login_success = login()
-
-    heartbeat_thread = threading.Thread(target=heartbeat_loop, args=(heartbeat_interval,), daemon=True)
-    heartbeat_thread.start()
-
-    while not stop_threads.is_set():
+    global login_attempts
+    login_attempts = 0
+    login()
+    while True:
         connection, internet = check_connection()
         # Check if the internet is connected
         if connection and internet :
-            time.sleep(connection_check_interval)
+            heartbeat()  # Send heartbeat
+            time.sleep(time_repeat)
         else:
-            if not login_success:  # Only increment on repeated failures
-                increment_login_attempts()
-
-            if get_login_attempts() > max_login_attempt:
-                logging.warning("Max login attempts exceeded. Retrying after a delay (60s)...")
+            if login_attempts > max_login_attempt:
+                logging.warning("Max login attempts exceeded")
                 time.sleep(60)
-                reset_login_attempts()
-
-            logging.info(f"Internet lost, Retrying login (attempt {get_login_attempts()})")
-            login_success = login()  # Retry login immediately
-            time.sleep(5)      
+                logging.warning("Start trying again...")
+                login_attempts = 0
+            logging.info(f"Internet lost, attempting to login... {login_attempts}")
+            login()    # Immediately log in if the connection or internet are lost
+            time.sleep(5)           
 #----------------------------------------------------------------------------------------------
 
 
@@ -263,12 +200,13 @@ def release_lock():
 
 # Signal handler for performing cleanup tasks and graceful shutdown ---------------------------
 def signal_handler(signal, frame):
-    stop_threads.set()  # Signal threads to stop
     release_lock()
     logging.info('Goodbye!')
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, signal_handler)
+
+acquire_lock()
 #----------------------------------------------------------------------------------------------
 
 
@@ -303,7 +241,6 @@ def open_log_file(icon, item):
 
 def on_quit(icon, item):
     logging.info("Exiting the system tray icon")
-    stop_threads.set()  # Signal threads to stop
     release_lock()
     icon.stop()
 
@@ -326,17 +263,10 @@ def run_system_tray():
     icon.icon = create_image()
     icon.menu = pystray.Menu(
         item('Open Logs', open_log_file),
-        item('Quit', on_quit),
-        item('Force Re-login',login())
+        item('Quit', on_quit)
     )
     icon.title = "Auto Authentication Service"
     icon.run()
 
-try:
-    acquire_lock()
-    run_system_tray()
-except Exception as e:
-    logging.error(f"Critical error: {e}")
-    release_lock()
-    sys.exit(1)
+run_system_tray()
 #----------------------------------------------------------------------------------------------
