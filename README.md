@@ -20,7 +20,7 @@ cd stray-auto-authen-kmitl
 ```
 pip install -r requirements.txt
 ```
-4. generate `encrypted_password.txt` and `encryption_key.key` in encryptpassword.py
+4. generate `encrypted_password.txt` and `encryption_key.key` with encryptpassword.py
 ```
 password = b"passwordhere" 
 ```
@@ -31,6 +31,7 @@ password = b"passwordhere"
 ```
 
 ### Usage
+run or set as startup
 ```
 stray_auto_authen.vbs
 ```

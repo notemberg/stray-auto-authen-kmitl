@@ -1,4 +1,5 @@
 from cryptography.fernet import Fernet
+import getpass
 
 key = Fernet.generate_key()
 
@@ -7,13 +8,15 @@ with open('encryption_key.key','wb') as key_file:
 
 cipher = Fernet(key)
 
-# change your password here --------
-password = b"passwordhere" 
+# get password --------
+password = getpass.getpass("Enter your password: ").encode()
 #-----------------------------------
 
 encrypted_password = cipher.encrypt(password)
+try:
+    with open('encrypted_password.txt','wb') as encrypted_file:
+        encrypted_file.write(encrypted_password)
+except:
+    print("Encryption Failed.")
 
-with open('encrypted_password.txt','wb') as encrypted_file:
-    encrypted_file.write(encrypted_password)
-
-print(f"Finish")
+print("Encryption complete. Encrypted password saved.")
