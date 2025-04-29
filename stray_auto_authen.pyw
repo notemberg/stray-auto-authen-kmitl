@@ -153,7 +153,6 @@ operationsystem = config['os']
 connection_check_interval = config['time_repeat'] # Time interval between connection_check in seconds
 heartbeat_interval = config['heartbeat_interval'] # Time interval between heartbeats in seconds
 max_login_attempt = config['max_login_attempt']
-session_duration = config['session_duration']  # 8 hours = 28800 seconds
 umac = ''.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff) for ele in range(0, 8 * 6, 8)][::-1])
 # -----------------------------------------------------------------------------
 
@@ -293,9 +292,6 @@ def start_authentication():
         if connection and internet :
             time.sleep(connection_check_interval)
         else:
-            if not login_success:  # Only increment on repeated failures
-                increment_login_attempts()
-
             if get_login_attempts() > max_login_attempt:
                 logging.warning("Max login attempts exceeded. Retrying after a delay (30s)...")
                 time.sleep(30)
