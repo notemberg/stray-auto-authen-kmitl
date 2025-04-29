@@ -1,4 +1,3 @@
-
 import os
 import logging
 import time
@@ -10,43 +9,15 @@ import signal
 import threading
 import msvcrt  # For file locking (Windows)
 import pystray
-from pystray import MenuItem as item # Stray Icon
+from pystray import MenuItem as item  # Tray Icon
 from PIL import Image, ImageDraw
-from datetime import datetime, timedelta
-from cryptography.fernet import Fernet # Key Encryption
+from datetime import datetime
+from cryptography.fernet import Fernet
+import tkinter as tk
+from tkinter import simpledialog
 
-# Key Encryption -----------------------------------------------------------------------------
-# Read configuration from config.json
-with open('config.json', 'r') as config_file:
-    config = json.load(config_file)
-
-# Read key encryption from encryption_key.key
-with open('encryption_key.key', 'rb') as key_file:
-    key = key_file.read()
-# Create decoding key
-cipher = Fernet(key)
-
-# Read password from encrypted_password.txt
-with open('encrypted_password.txt', 'rb') as encrypted_file:
-    encrypted_password = encrypted_file.read()
-#----------------------------------------------------------------------------------------------
-
-
-# Load IP address and URLs from config.json ---------------------------------------------------
-userName = config['username']
-userPass = cipher.decrypt(encrypted_password).decode()
-ipAddress = config['ipAddress']
-server_url = config['server_url']
-acip = config['acip']
-server_url_heartbeat = config['server_url_heartbeat']
-time_repeat = config['time_repeat']  # Time interval between heartbeats in seconds
-max_login_attempt = config['max_login_attempt']
-session_duration = config['session_duration']  # 8 hours = 28800 seconds
-umac = ''.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff) for ele in range(0, 8 * 6, 8)][::-1])
-#----------------------------------------------------------------------------------------------
-
-
-# Logging setup -------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Logging setup
 log_folder = "logs"
 if not os.path.exists(log_folder):
     os.makedirs(log_folder)
@@ -59,17 +30,139 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
-#----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Tkinter Password Prompt
+def ask_password():
+    # Create a hidden Tkinter root window
+    root = tk.Tk()
+    root.withdraw()
+    # Ask for the password via a pop-up dialog
+    password = simpledialog.askstring("Password", "Enter your password:", show='*')
+    root.destroy()
+    if not password:
+        logging.error("No password provided. Exiting.")
+        sys.exit(1)
+    return password.encode()
 
-# Session tracking variables ------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Generate Encryption Key and Encrypt Password if Files Do Not Exist
+def generate_key_and_password():
+    logging.info("Encryption key or encrypted password not found. Generating new key and encrypting password.")
+    try:
+        key = Fernet.generate_key()
+    except Exception as e:
+        logging.error(f"Error generating encryption key: {e}")
+        sys.exit(1)
+    
+    try:
+        with open('encryption_key.key', 'wb') as key_file:
+            key_file.write(key)
+    except IOError as e:
+        logging.error(f"Failed to write encryption key file: {e}")
+        sys.exit(1)
+    
+    cipher = Fernet(key)
+    
+    try:
+        password = ask_password()  # Use Tkinter pop-up to ask for the password
+    except Exception as e:
+        logging.error(f"Error obtaining password: {e}")
+        sys.exit(1)
+    
+    try:
+        encrypted_password = cipher.encrypt(password)
+    except Exception as e:
+        logging.error(f"Encryption failed: {e}")
+        sys.exit(1)
+    
+    try:
+        with open('encrypted_password.txt', 'wb') as encrypted_file:
+            encrypted_file.write(encrypted_password)
+    except IOError as e:
+        logging.error(f"Failed to write encrypted password file: {e}")
+        sys.exit(1)
+    
+    logging.info("Encryption complete. Encrypted password saved.")
+    return key
+
+# Check if encryption key and encrypted password files exist; if not, generate them.
+if not os.path.exists('encryption_key.key') or not os.path.exists('encrypted_password.txt'):
+    generate_key_and_password()
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# File Reading 
+# Read configuration from config.json
+with open('config.json', 'r') as config_file:
+    config = json.load(config_file)
+
+# Read key encryption from encryption_key.key
+with open('encryption_key.key', 'rb') as key_file:
+    key = key_file.read()
+# Create decoding key
+cipher = Fernet(key)
+
+# Read password from encrypted_password.txt
+def load_encrypted_password(file_path):
+    try:
+        with open(file_path, 'rb') as encrypted_file:
+            return encrypted_file.read()
+    except FileNotFoundError:
+        logging.error(f"Encrypted password file not found: {file_path}")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"Error loading encrypted password: {e}")
+        sys.exit(1)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Load configuration and credentials
+config = load_config('config.json')
+key = load_encryption_key('encryption_key.key')
+encrypted_password = load_encrypted_password('encrypted_password.txt')
+
+# Create decoding key
+cipher = Fernet(key)
+
+userName = config['username']
+userPass = cipher.decrypt(encrypted_password).decode()
+ipAddress = config['ipAddress']
+server_url = config['server_url']
+acip = config['acip']
+server_url_heartbeat = config['server_url_heartbeat']
+time_repeat = config['time_repeat']  # Time interval between heartbeats in seconds
+max_login_attempt = config['max_login_attempt']
+umac = ''.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff) for ele in range(0, 8 * 6, 8)][::-1])
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Session tracking 
 login_time = None
 login_attempts = 0
+login_attempts_lock = threading.Lock()  # Lock for thread-safe access
 agent = requests.session()
-#----------------------------------------------------------------------------------------------
 
+def increment_login_attempts():
+    global login_attempts
+    with login_attempts_lock:
+        login_attempts += 1
 
-# Function to monitor network connection ------------------------------------------------------
+def reset_login_attempts():
+    global login_attempts
+    with login_attempts_lock:
+        login_attempts = 0
+
+def get_login_attempts():
+    with login_attempts_lock:
+        return login_attempts
+#------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Function to monitor network connection 
 def check_connection():
     # Ping an external URL to check internet connectivity
     try:
@@ -80,10 +173,10 @@ def check_connection():
         return True, True
     
     return True, False
-#----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
-
-# Request to login ----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Login Function
 def login():
     global login_time, login_attempts
     logging.info(f"Attempting login with username -> {userName}")
@@ -92,14 +185,15 @@ def login():
         connection, internet = check_connection()
 
          # Send login request
-        content = agent.post(url, params={'userName': userName,
-                                          'userPass': userPass,
-                                          'uaddress': ipAddress,
-                                          'umac': umac,
-                                          'agreed': 1,
-                                          'acip': acip,
-                                          'authType': 1
-                                          })
+        content = agent.post(url, params={
+            'userName': userName,
+            'userPass': userPass,
+            'uaddress': ipAddress,
+            'umac': umac,
+            'agreed': 1,
+            'acip': acip,
+            'authType': 1
+            })
         
         content_dict = json.loads(content.text)
         data = content_dict['data']
@@ -120,11 +214,30 @@ def login():
         login_attempts = 0  # Reset login attempts
     else:
         logging.warning(f"Login failed: {data}")
-        login_attempts += 1
-#----------------------------------------------------------------------------------------------
+        increment_login_attempts()
+        return False
+# -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Force Re-login
+def force_relogin(icon, item):
+    logging.info("Force re-login initiated from system tray")
+    def relogin_loop():
+        while True:
+            if login():
+                logging.info("Force re-login successful")
+                break
+            else:
+                logging.warning("Force re-login attempt failed, retrying in 5 seconds...")
+                time.sleep(5)
+    threading.Thread(target=relogin_loop, daemon=True).start()
 
-# Function to send a heartbeat request to keep the session alive ------------------------------
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Heartbeat
+stop_threads = threading.Event()
+
 def heartbeat():
     global login_attempts
     try:
@@ -143,33 +256,38 @@ def heartbeat():
     else:
         logging.warning('Heartbeat failed, checking if session expired...')
         return True, False
-#----------------------------------------------------------------------------------------------    
+    
+def heartbeat_loop(heartbeat_interval):
+    while not stop_threads.is_set():
+        heartbeat()
+        time.sleep(heartbeat_interval)
+# -----------------------------------------------------------------------------
 
-
-# main authen loop ----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Main Authentication Loop
 def start_authentication():
-    global login_attempts
-    login_attempts = 0
-    login()
-    while True:
+    login_success = login()
+    heartbeat_thread = threading.Thread(target=heartbeat_loop, args=(heartbeat_interval,), daemon=True)
+    heartbeat_thread.start()
+    while not stop_threads.is_set():
         connection, internet = check_connection()
         # Check if the internet is connected
         if connection and internet :
             heartbeat()  # Send heartbeat
             time.sleep(time_repeat)
         else:
-            if login_attempts > max_login_attempt:
-                logging.warning("Max login attempts exceeded")
-                time.sleep(60)
-                logging.warning("Start trying again...")
-                login_attempts = 0
-            logging.info(f"Internet lost, attempting to login... {login_attempts}")
-            login()    # Immediately log in if the connection or internet are lost
-            time.sleep(5)           
-#----------------------------------------------------------------------------------------------
+            if get_login_attempts() > max_login_attempt:
+                logging.warning("Max login attempts exceeded. Retrying after a delay (30s)...")
+                time.sleep(30)
+                reset_login_attempts()
 
+            logging.info(f"Internet lost, Retrying login (attempt {get_login_attempts()})")
+            login_success = login()  # Retry login immediately
+            time.sleep(5)      
+# -----------------------------------------------------------------------------
 
-# Lock file location (Windows) ----------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Lock File for Single Instance (Windows)
 lock_file = "authen_script.lock"
 
 def acquire_lock():
@@ -195,22 +313,20 @@ def release_lock():
             logging.warning("Lock file is already closed or not initialized.")
     except Exception as e:
         logging.error(f"Failed to release lock: {e}")
-#----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
-
-# Signal handler for performing cleanup tasks and graceful shutdown ---------------------------
+# -----------------------------------------------------------------------------
+# Signal handler for performing cleanup tasks and graceful shutdown 
 def signal_handler(signal, frame):
     release_lock()
     logging.info('Goodbye!')
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, signal_handler)
+# -----------------------------------------------------------------------------
 
-acquire_lock()
-#----------------------------------------------------------------------------------------------
-
-
-# System Tray Functions -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# System Tray Functions
 def create_image():
     image = Image.new('RGB', (64, 64), "black")
     d = ImageDraw.Draw(image)
@@ -247,26 +363,29 @@ def on_quit(icon, item):
 def run_authen():
     logging.info("Starting authentication loop")
     start_authentication()
-#----------------------------------------------------------------------------------------------
 
-
-# Start authentication in a separate thread ---------------------------------------------------
+# Start authentication in a separate thread
 authen_thread = threading.Thread(target=run_authen)
 authen_thread.daemon = True
 authen_thread.start()
-#----------------------------------------------------------------------------------------------
 
-
-# System tray icon setup ----------------------------------------------------------------------
+# System tray icon setup
 def run_system_tray():
     icon = pystray.Icon("Authen Script")
     icon.icon = create_image()
     icon.menu = pystray.Menu(
+        item('Force Re-login',force_relogin),
         item('Open Logs', open_log_file),
         item('Quit', on_quit)
     )
     icon.title = "Auto Authentication Service"
     icon.run()
 
-run_system_tray()
-#----------------------------------------------------------------------------------------------
+try:
+    acquire_lock()
+    run_system_tray()
+except Exception as e:
+    logging.error(f"Critical error: {e}")
+    release_lock()
+    sys.exit(1)
+# -----------------------------------------------------------------------------
