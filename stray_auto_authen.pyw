@@ -157,8 +157,6 @@ session_duration = config['session_duration']  # 8 hours = 28800 seconds
 umac = ''.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff) for ele in range(0, 8 * 6, 8)][::-1])
 # -----------------------------------------------------------------------------
 
-
-
 # -----------------------------------------------------------------------------
 # Session tracking 
 login_time = None

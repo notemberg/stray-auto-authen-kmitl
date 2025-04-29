@@ -20,11 +20,7 @@ cd stray-auto-authen-kmitl
 ```
 pip install -r requirements.txt
 ```
-4. generate `encrypted_password.txt` and `encryption_key.key` with encryptpassword.py
-```
-password = b"passwordhere" 
-```
-5. edit username and ipaddress in config.json
+4. edit username and ipaddress in config.json
 ```
 "username":"    ",
 "ipAddress": "    ",
@@ -41,7 +37,8 @@ stray_auto_authen.vbs
 |:-----:|:----:|-------------|
 | `username` | Username | Username to login _(without **@kmitl.ac.th**)_ |
 | `ipAddress` | Ip-Address | Ipaddress for local network |
-| `time_repeat` | Interval | Heartbeat interval in seconds |
+| `time_repeat` | Interval | Time interval between connection_check in seconds |
+| `heartbeat_interval` | Interval | Heartbeat interval in seconds |
 | `max_login_attempt` | Max_Login_Attempt | max login attempts before resetting |
 
 ### Credit
