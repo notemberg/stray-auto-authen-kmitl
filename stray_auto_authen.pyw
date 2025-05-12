@@ -97,14 +97,29 @@ if not os.path.exists('encryption_key.key') or not os.path.exists('encrypted_pas
 # -----------------------------------------------------------------------------
 # File Reading 
 # Read configuration from config.json
-with open('config.json', 'r') as config_file:
-    config = json.load(config_file)
+def load_config(file_path):
+    try:
+        with open(file_path, 'r') as config_file:
+            return json.load(config_file)
+    except FileNotFoundError:
+        logging.error(f"Configuration file not found: {file_path}")
+        sys.exit(1)
+    except json.JSONDecodeError:
+        logging.error(f"Configuration file is not a valid JSON: {file_path}")
+        sys.exit(1)
 
 # Read key encryption from encryption_key.key
-with open('encryption_key.key', 'rb') as key_file:
-    key = key_file.read()
-# Create decoding key
-cipher = Fernet(key)
+def load_encryption_key(file_path):
+    try:
+        with open(file_path, 'rb') as key_file:
+            return key_file.read()
+    except FileNotFoundError:
+        logging.error(f"Encryption key file not found: {file_path}")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"Error loading encryption key: {e}")
+        sys.exit(1)
+
 
 # Read password from encrypted_password.txt
 def load_encrypted_password(file_path):
@@ -134,7 +149,9 @@ ipAddress = config['ipAddress']
 server_url = config['server_url']
 acip = config['acip']
 server_url_heartbeat = config['server_url_heartbeat']
-time_repeat = config['time_repeat']  # Time interval between heartbeats in seconds
+operationsystem = config['os']
+connection_check_interval = config['connection_check_interval']  # Time interval between connection_check in seconds
+heartbeat_interval = config['heartbeat_interval'] # Time interval between heartbeats in seconds
 max_login_attempt = config['max_login_attempt']
 umac = ''.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff) for ele in range(0, 8 * 6, 8)][::-1])
 # -----------------------------------------------------------------------------
@@ -178,7 +195,7 @@ def check_connection():
 # -----------------------------------------------------------------------------
 # Login Function
 def login():
-    global login_time, login_attempts
+    global login_time
     logging.info(f"Attempting login with username -> {userName}")
     try:
         url = server_url
@@ -200,18 +217,19 @@ def login():
 
         if content.status_code != 200:
             logging.warning('Error! Something went wrong (maybe wrong username and/or password?)...')
+            return False
 
     except requests.exceptions.RequestException:
         logging.warning(f'Connection lost... ')
-        login_attempts += 1
-        return  # Exit the function early on connection failure
+        return False
     
-    time.sleep(4)  
+    time.sleep(5)  
     connection, internet = check_connection()
     if connection and internet:
         logging.info(f"Login successful at {datetime.now()}: {data}")
         login_time = datetime.now()  # Record login time
-        login_attempts = 0  # Reset login attempts
+        reset_login_attempts()  # Reset login attempts
+        return True
     else:
         logging.warning(f"Login failed: {data}")
         increment_login_attempts()
@@ -274,7 +292,7 @@ def start_authentication():
         # Check if the internet is connected
         if connection and internet :
             heartbeat()  # Send heartbeat
-            time.sleep(time_repeat)
+            time.sleep(connection_check_interval)
         else:
             if get_login_attempts() > max_login_attempt:
                 logging.warning("Max login attempts exceeded. Retrying after a delay (30s)...")

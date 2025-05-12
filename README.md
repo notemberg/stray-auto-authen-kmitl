@@ -25,9 +25,10 @@ pip install -r requirements.txt
 "username":"    ",
 "ipAddress": "    ",
 ```
+5. fill password in program window if prompted
 
 ### Usage
-run or set as startup
+run .vbs script or set .vbs script as startup
 ```
 stray_auto_authen.vbs
 ```
@@ -43,7 +44,7 @@ stray_auto_authen.vbs
 
 ### Credit
 * **_assazzin & CSAG_** for original [Auto-authen-KMITL](https://github.com/assazzin/Auto-authen-KMITL) written in Perl language
-* **_Network Laboratory_** for original [Auto-authen-KMITL](https://gitlab.com/networklab-kmitl/auto-authen-kmitl) written in Python language Before CSC-KMITL Upgrade Authen Website
+* **_Network Laboratory_** for original [auto-authen-kmitl](https://gitlab.com/networklab-kmitl/auto-authen-kmitl) written in Python language Before CSC-KMITL Upgrade Authen Website
 * **_CE-HOUSE_** for original [Auto-Authen-KMITL](https://github.com/CE-HOUSE/Auto-Authen-KMITL) written in Python language 
 * Core functions from these projects are used in this project under the MIT License. See the included license for more details.
 
