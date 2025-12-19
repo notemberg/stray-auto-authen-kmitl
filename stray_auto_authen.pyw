@@ -13,8 +13,6 @@ from pystray import MenuItem as item  # Tray Icon
 from PIL import Image, ImageDraw
 from datetime import datetime
 from cryptography.fernet import Fernet
-import tkinter as tk
-from tkinter import simpledialog
 
 # -----------------------------------------------------------------------------
 # Logging setup
@@ -26,29 +24,12 @@ log_filename = os.path.join(log_folder, f"authen_log_{datetime.now().strftime('%
 
 logging.basicConfig(
     filename=log_filename,
-    filemode="w",
+    filemode="a",
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 # -----------------------------------------------------------------------------
 
-# -----------------------------------------------------------------------------
-# Tkinter Password Prompt
-def ask_password():
-    # Create a hidden Tkinter root window
-    root = tk.Tk()
-    root.withdraw()
-    # Ask for the password via a pop-up dialog
-    password = simpledialog.askstring("Password", "Enter your password:", show='*')
-    root.destroy()
-    if not password:
-        logging.error("No password provided. Exiting.")
-        sys.exit(1)
-    return password.encode()
-
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
 # Generate Encryption Key and Encrypt Password if Files Do Not Exist
 def generate_key_and_password():
     logging.info("Encryption key or encrypted password not found. Generating new key and encrypting password.")
